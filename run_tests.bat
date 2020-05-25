@@ -1,4 +1,0 @@
-SET APP_DB_USERNAME=postgres
-SET APP_DB_PASSWORD=admin
-SET APP_DB_NAME=gomux
-go test -v
