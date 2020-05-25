@@ -20,9 +20,9 @@ var a App
 
 func TestMain(m *testing.M) {
 	a.Initialize(
-		"postgres", //os.Getenv("APP_DB_USERNAME"),
-		"",         //os.Getenv("APP_DB_PASSWORD"),
-		"postgres") //os.Getenv("APP_DB_NAME"))
+		os.Getenv("APP_DB_USERNAME"),
+		os.Getenv("APP_DB_PASSWORD"),
+		os.Getenv("APP_DB_NAME"))
 
 	ensureTableExists()
 	code := m.Run()
@@ -59,6 +59,20 @@ func TestEmptyTable(t *testing.T) {
 
 	if body := response.Body.String(); body != "[]" {
 		t.Errorf("Expected an empty array. Got %s", body)
+	}
+}
+
+func TestFilterPrice(t *testing.T) {
+	clearTable()
+	addProducts(10)
+
+	req, _ := http.NewRequest("GET", "/products?min_price=60&max_price=70", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusOK, response.Code)
+
+	if body := response.Body.String(); body != "[{\"id\":6,\"name\":\"Product 5\",\"price\":60},{\"id\":7,\"name\":\"Product 6\",\"price\":70}]" {
+		t.Errorf("Expected '[{\"id\":6,\"name\":\"Product 5\",\"price\":60},{\"id\":7,\"name\":\"Product 6\",\"price\":70}]'. Got %s", body)
 	}
 }
 
@@ -204,4 +218,84 @@ func TestDeleteProduct(t *testing.T) {
 	req, _ = http.NewRequest("GET", "/product/1", nil)
 	response = executeRequest(req)
 	checkResponseCode(t, http.StatusNotFound, response.Code)
+}
+
+func TestDiscountExistentProduct(t *testing.T) {
+	clearTable()
+	addProducts(1)
+
+	req, _ := http.NewRequest("PUT", "/product/1/discount?discount=25", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusOK, response.Code)
+
+	var m map[string]interface{}
+	json.Unmarshal(response.Body.Bytes(), &m)
+
+	if m["price"] != 7.5 {
+		t.Errorf("Expected product price to be '7.5'. Got '%v'", m["price"])
+	}
+
+	body, _ := ioutil.ReadAll(response.Body)
+	fmt.Print("\t" + string(body) + "\n")
+}
+
+func TestInvalidDiscountExistentProduct(t *testing.T) {
+	clearTable()
+	addProducts(1)
+
+	// Test discount -1
+	req, _ := http.NewRequest("PUT", "/product/1/discount?discount=-1", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusBadRequest, response.Code)
+	
+	var m map[string]string
+	json.Unmarshal(response.Body.Bytes(), &m)
+	if m["error"] != "Discount must be >= 0 and <= 100" {
+		t.Errorf("Expected the 'error' key of the response to be set to 'Discount must be >= 0 and <= 100'. Got '%s'", m["error"])
+	}
+	
+	// Test discount 101
+	req, _ = http.NewRequest("PUT", "/product/1/discount?discount=101", nil)
+	response = executeRequest(req)
+
+	checkResponseCode(t, http.StatusBadRequest, response.Code)
+	
+	json.Unmarshal(response.Body.Bytes(), &m)
+	if m["error"] != "Discount must be >= 0 and <= 100" {
+		t.Errorf("Expected the 'error' key of the response to be set to 'Discount must be >= 0 and <= 100'. Got '%s'", m["error"])
+	}
+	
+	// Test discount abc
+	req, _ = http.NewRequest("PUT", "/product/1/discount?discount=abc", nil)
+	response = executeRequest(req)
+
+	checkResponseCode(t, http.StatusBadRequest, response.Code)
+	
+	json.Unmarshal(response.Body.Bytes(), &m)
+	if m["error"] != "Invalid discount" {
+		t.Errorf("Expected the 'error' key of the response to be set to 'Invalid discount'. Got '%s'", m["error"])
+	}
+	
+	// Test missing discount param
+	req, _ = http.NewRequest("PUT", "/product/1/discount", nil)
+	response = executeRequest(req)
+
+	checkResponseCode(t, http.StatusNotFound, response.Code)
+}
+
+func TestDiscountNonExistentProduct(t *testing.T) {
+	clearTable()
+
+	req, _ := http.NewRequest("PUT", "/product/11/discount?discount=50", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusNotFound, response.Code)
+
+	var m map[string]string
+	json.Unmarshal(response.Body.Bytes(), &m)
+	if m["error"] != "Product not found" {
+		t.Errorf("Expected the 'error' key of the response to be set to 'Product not found'. Got '%s'", m["error"])
+	}
 }

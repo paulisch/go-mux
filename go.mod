@@ -1,4 +1,4 @@
-module github.com/mrckurz/go-mux.git
+module github.com/paulisch/go-mux.git
 
 go 1.14
 

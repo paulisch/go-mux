@@ -43,10 +43,10 @@ func (p *product) createProduct(db *sql.DB) error {
 	return nil
 }
 
-func getProducts(db *sql.DB, start, count int) ([]product, error) {
+func getProducts(db *sql.DB, start, count int, minPrice float64, maxPrice float64) ([]product, error) {
 	rows, err := db.Query(
-		"SELECT id, name,  price FROM products LIMIT $1 OFFSET $2",
-		count, start)
+		"SELECT id, name,  price FROM products WHERE price >= $3 AND price <= $4 LIMIT $1 OFFSET $2",
+		count, start, minPrice, maxPrice)
 
 	if err != nil {
 		return nil, err
